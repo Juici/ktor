@@ -6,11 +6,10 @@ import io.ktor.client.request.*
 import io.ktor.client.utils.*
 import io.ktor.content.*
 import kotlinx.coroutines.experimental.*
-import java.net.*
 
 class CIOEngine(private val config: CIOEngineConfig) : HttpClientEngine {
     private val dispatcher = config.dispatcher ?: HTTP_CLIENT_DEFAULT_DISPATCHER
-    private val endpoints = mutableMapOf<SocketAddress, Endpoint>()
+    private val endpoints = mutableMapOf<String, Endpoint>()
 
     override fun prepareRequest(builder: HttpRequestBuilder, call: HttpClientCall): HttpRequest =
             CIOHttpRequest(call, this, builder.build())
@@ -20,10 +19,13 @@ class CIOEngine(private val config: CIOEngineConfig) : HttpClientEngine {
             content: OutgoingContent,
             continuation: CancellableContinuation<CIOHttpResponse>
     ) {
-        val address = with(request.url) { InetSocketAddress(host, port) }
-        val endpoint = synchronized(endpoints) {
-            endpoints.computeIfAbsent(address) { Endpoint(dispatcher, config.endpointConfig, address) }
+        val endpoint = with(request.url) {
+            val address = "$host:$port"
+            synchronized(endpoints) {
+                endpoints.computeIfAbsent(address) { Endpoint(host, port, dispatcher, config.endpointConfig) }
+            }
         }
+
         endpoint.execute(ConnectorRequestTask(request, content, continuation))
     }
 

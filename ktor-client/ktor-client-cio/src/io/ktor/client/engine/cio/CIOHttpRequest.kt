@@ -5,14 +5,8 @@ import io.ktor.client.request.*
 import io.ktor.client.response.*
 import io.ktor.content.*
 import io.ktor.http.*
-import io.ktor.http.cio.*
-import io.ktor.network.sockets.*
 import io.ktor.util.*
 import kotlinx.coroutines.experimental.*
-import kotlinx.coroutines.experimental.io.*
-import java.io.*
-import java.net.*
-import java.util.*
 
 
 class CIOHttpRequest(

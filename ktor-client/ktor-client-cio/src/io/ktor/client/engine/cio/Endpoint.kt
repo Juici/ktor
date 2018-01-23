@@ -7,19 +7,20 @@ import java.net.*
 import java.util.concurrent.atomic.*
 
 class EndpointConfig {
-    var queueSizePerThread: Int = 32
     var maxConnectionsPerRoute: Int = 1000
     var keepAliveTime: Int = 5000
 }
 
 internal class Endpoint(
+        host: String,
+        port: Int,
         private val dispatcher: CoroutineDispatcher,
-        private val endpointConfig: EndpointConfig,
-        private val address: InetSocketAddress
+        private val endpointConfig: EndpointConfig
 ) : Closeable {
     private val tasks: Channel<ConnectorRequestTask> = Channel(Channel.UNLIMITED)
     private val connections = AtomicInteger()
     private val queueSize = AtomicInteger()
+    private val address = InetSocketAddress(host, port)
 
     init {
         newConnection()
@@ -31,7 +32,7 @@ internal class Endpoint(
 
         val queueSize = queueSize.get()
         val connectionsCount = connections.get()
-        if (queueSize > endpointConfig.queueSizePerThread && connectionsCount < endpointConfig.maxConnectionsPerRoute) {
+        if (queueSize > 0 && connectionsCount < endpointConfig.maxConnectionsPerRoute) {
             newConnection()
         }
     }

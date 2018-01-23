@@ -7,9 +7,11 @@ import io.ktor.network.sockets.*
 import io.ktor.network.sockets.Socket
 import kotlinx.coroutines.experimental.*
 import kotlinx.coroutines.experimental.channels.*
+import kotlinx.coroutines.experimental.channels.Channel
 import kotlinx.coroutines.experimental.io.*
 import java.io.*
 import java.net.*
+import java.nio.channels.*
 import java.util.*
 
 internal class ConnectorRequestTask(
@@ -37,7 +39,7 @@ internal class ConnectionPipeline(
 
     val pipelineContext: Job = launch(dispatcher) {
         try {
-            socket = aSocket().tcp().connect(address)
+            socket = aSocket().tcpNoDelay().tcp().connect(address)
             while (true) {
                 val task = withTimeout(keepAliveTime) {
                     tasks.receive()
@@ -48,17 +50,13 @@ internal class ConnectionPipeline(
                     responseHandler.send(ConnectorResponseTask(Date(), task.continuation, task.request))
                 } catch (cause: Throwable) {
                     task.continuation.resumeWithException(cause)
+                    throw cause
                 }
 
-                val writerJob = writer(Unconfined) {
-                    task.request.write(channel, task.content)
-                }
-
-                writerJob.channel.joinTo(outputChannel, closeOnEnd = false)
-                outputChannel.flush()
+                task.request.write(outputChannel, task.content)
             }
-        } catch (cause: Throwable) {
-            outputChannel.close(cause)
+        } catch (cause: ClosedChannelException) {
+        } catch (cause: ClosedReceiveChannelException) {
         } finally {
             responseHandler.close()
             outputChannel.close()
@@ -82,6 +80,8 @@ internal class ConnectionPipeline(
                 task.continuation.resume(CIOHttpResponse(task.call, task.requestTime, writerJob.channel, response))
 
                 writerJob
+            } catch (cause: ClosedChannelException) {
+                null
             } catch (cause: Throwable) {
                 task.continuation.resumeWithException(cause)
                 null

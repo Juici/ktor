@@ -54,23 +54,18 @@ internal suspend fun CIOHttpRequest.write(output: ByteWriteChannel, content: Out
     val channel = chunkedJob?.channel ?: output
 
     try {
-        channel.writeBody(content)
+        when (content) {
+            is OutgoingContent.NoContent -> return
+            is OutgoingContent.ByteArrayContent -> channel.writeFully(content.bytes())
+            is OutgoingContent.ReadChannelContent -> content.readFrom().joinTo(channel, closeOnEnd = false)
+            is OutgoingContent.WriteChannelContent -> content.writeTo(channel)
+            is OutgoingContent.ProtocolUpgrade -> throw UnsupportedContentTypeException(content)
+        }
     } catch (cause: Throwable) {
         channel.close(cause)
         executionContext.completeExceptionally(cause)
     } finally {
-        channel.close()
         chunkedJob?.join()
         executionContext.complete(Unit)
-    }
-}
-
-private suspend fun ByteWriteChannel.writeBody(body: OutgoingContent) {
-    when (body) {
-        is OutgoingContent.NoContent -> return
-        is OutgoingContent.ByteArrayContent -> writeFully(body.bytes())
-        is OutgoingContent.ReadChannelContent -> body.readFrom().copyTo(this)
-        is OutgoingContent.WriteChannelContent -> body.writeTo(this)
-        is OutgoingContent.ProtocolUpgrade -> throw UnsupportedContentTypeException(body)
     }
 }
